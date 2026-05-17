@@ -352,6 +352,44 @@ def make_json_export():
 def clear_chat():
     st.session_state.chat_history = []
 
+def ask_gemini(prompt: str) -> str:
+    """
+    Gemini API를 호출해 상담 보조용 응답을 생성한다.
+    API Key가 없거나 호출 실패 시 목업 응답으로 대체한다.
+    """
+    if not GEMINI_API_KEY:
+        return (
+            "Gemini API Key가 설정되지 않아 목업 응답을 표시합니다.\n\n"
+            "현재 회기에서는 수면 문제, 피로감, 출근 전 불안이 반복적으로 나타나며, "
+            "다음 회기에서는 수면 양상, 불안 유발 상황, 회피 행동, 자기비하적 사고를 우선 확인하는 것이 적절합니다."
+        )
+
+    try:
+        client = genai.Client(api_key=GEMINI_API_KEY)
+
+        system_context = f"""
+너는 심리상담사를 보조하는 상담 기록 분석 도우미다.
+진단을 확정하지 말고, 상담 기록 기반의 관찰·요약·다음 회기 질문 제안만 제공한다.
+응답은 한국어로 작성한다.
+현재 내담자: {st.session_state.selected_client}
+현재 회기: {st.session_state.selected_session}
+현재 앱은 데모/MVP 단계이므로 실제 진단이나 치료 지시처럼 단정하지 않는다.
+"""
+
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=system_context + "\n\n상담사 질문:\n" + prompt,
+        )
+
+        return response.text
+
+    except Exception as e:
+        return (
+            "Gemini API 호출 중 오류가 발생했습니다. 현재는 목업 응답을 표시합니다.\n\n"
+            f"오류 요약: {str(e)}\n\n"
+            "현재 회기에서는 수면 문제, 피로감, 출근 전 불안이 반복적으로 나타나며, "
+            "다음 회기에서는 수면 양상, 불안 유발 상황, 회피 행동, 자기비하적 사고를 우선 확인하는 것이 적절합니다."
+        )
 
 def add_mock_answer(user_prompt: str):
     st.session_state.chat_history.append(
@@ -361,23 +399,20 @@ def add_mock_answer(user_prompt: str):
         }
     )
 
+    answer = ask_gemini(user_prompt)
+
     st.session_state.chat_history.append(
         {
             "role": "assistant",
-            "content": (
-                "현재는 목업 응답입니다. 실제 구현 시 RAG가 현재 상담기록을 바탕으로 "
-                "유사 상담 사례, 임상 가이드라인, 상담 이론 문서를 검색하고 답변을 생성합니다.\n\n"
-                "현재 회기에서는 수면 문제, 피로감, 출근 전 불안이 반복적으로 나타나며, "
-                "다음 회기에서는 수면 양상, 불안 유발 상황, 회피 행동, 자기비하적 사고를 우선 확인하는 것이 적절합니다."
-            ),
+            "content": answer,
             "sources": [
                 {
-                    "title": "유사 상담 예시 #CASE-014",
-                    "desc": "수면 문제·출근 전 불안·직무 스트레스가 함께 나타난 유사 상담 사례",
+                    "title": "현재 상담 기록 컨텍스트",
+                    "desc": f"{st.session_state.selected_client} · {st.session_state.selected_session} 기준 목업 상담 데이터",
                 },
                 {
-                    "title": "상담 가이드라인 PDF p.12",
-                    "desc": "입면곤란, 중도각성, 회피행동, 안전확인 질문 참고",
+                    "title": "Gemini API 응답",
+                    "desc": "Google Gemini API를 활용한 상담 보조 응답. 실제 RAG 출처 연결은 추후 구현 예정",
                 },
             ],
         }
