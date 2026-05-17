@@ -1,0 +1,8 @@
+.streamlit/secrets.toml
+__pycache__/
+*.pyc
+.env
+cloudflared
+cloudflared.log
+streamlit.log
+chroma_db/
